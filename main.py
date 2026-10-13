@@ -14,10 +14,6 @@ logger = logging.getLogger("exam-paper-collector")
 BOT_TOKEN = os.environ.get("BOT_TOKEN", "")
 CHANNEL_ID = os.environ.get("CHANNEL_ID", "")
 WEBHOOK_SECRET = os.environ.get("WEBHOOK_SECRET", "")
-# Optional comma-separated numeric IDs. Leave blank to accept submissions from anyone.
-ALLOWED_USER_IDS = {
-    value.strip() for value in os.environ.get("ALLOWED_USER_IDS", "").split(",") if value.strip()
-}
 TELEGRAM_API = f"https://api.telegram.org/bot{BOT_TOKEN}"
 
 app = FastAPI(title="Exam Paper Collector")
@@ -81,17 +77,22 @@ async def webhook(
     if not message:
         return {"ok": True}
 
-    sender_id = str(message.get("from", {}).get("id", ""))
     chat_id = message.get("chat", {}).get("id")
     if not chat_id:
         return {"ok": True}
-
-    if ALLOWED_USER_IDS and sender_id not in ALLOWED_USER_IDS:
-        await reply(chat_id, "Sorry, this bot is not accepting submissions from your account.")
+    # The collection channel is output-only: never post acknowledgements there.
+    if str(chat_id) == str(CHANNEL_ID):
         return {"ok": True}
 
     document = message.get("document")
     if not document or not is_pdf(document):
+        if message.get("text", "").strip().lower() in {"/start", "/help"}:
+            await reply(
+                chat_id,
+                "Send an exam paper as a PDF document and I will submit it to the channel. "
+                "You can send as many PDFs as you need.",
+            )
+            return {"ok": True}
         await reply(chat_id, "Please send an exam paper as a PDF document.")
         return {"ok": True}
 
@@ -105,7 +106,11 @@ async def webhook(
                 "message_id": message["message_id"],
             },
         )
-        await reply(chat_id, "Received — your PDF has been submitted.")
+        await reply(
+            chat_id,
+            "Received — your PDF has been submitted. Have another exam paper? "
+            "Send the next PDF anytime. Use /start for instructions.",
+        )
     except Exception:
         logger.exception("Could not copy PDF to the channel")
         await reply(chat_id, "Sorry, the submission could not be sent. Please try again shortly.")
