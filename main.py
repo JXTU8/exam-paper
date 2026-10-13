@@ -51,7 +51,7 @@ def telegram(method, payload):
 
 
 def reply(chat_id, text, reply_to_message_id=None):
-    payload = {"chat_id": chat_id, "text": text}
+    payload = {"chat_id": chat_id, "text": text, "parse_mode": "HTML"}
     if reply_to_message_id:
         payload["reply_to_message_id"] = reply_to_message_id
     telegram("sendMessage", payload)
@@ -113,7 +113,7 @@ def webhook():
                 )
             except Exception:
                 logger.exception("Could not send labelled PDF to the channel")
-                reply(chat_id, "Sorry, the submission could not be sent. Please try again shortly.")
+                reply(chat_id, "Sorry, the submission could not be sent. Please try again shortly and report to admin if the problem persists.")
             return jsonify(ok=True)
 
         paper_key = (chat_id, message["message_id"])
@@ -125,8 +125,7 @@ def webhook():
         reply(
             chat_id,
             "What paper is this? Reply directly to the PDF with its label, for example: KMS Chem. "
-            "You can also send future PDFs with a caption starting with KM. If you do not reply in 1 minute, "
-            "I will submit the PDF without a label.",
+            "You can also send future PDFs with a caption starting with <b>KM</b>.",
             message["message_id"],
         )
         return jsonify(ok=True)
@@ -141,8 +140,8 @@ def webhook():
         if not is_valid_label(label):
             reply(
                 chat_id,
-                "What paper is this? Please reply directly to the PDF with a label starting with KM, "
-                "for example: KMS Chem",
+                "What paper is this? Please reply directly to the PDF with a label starting with <b>KM</b>, "
+                "for example: KMS Cs",
             )
             return jsonify(ok=True)
         paper_key = (chat_id, replied_message["message_id"])
@@ -156,11 +155,11 @@ def webhook():
             submit_paper(replied_document, label)
             reply(
                 chat_id,
-                "Received — your PDF has been submitted. Have another exam paper? Send the next PDF anytime.",
+                "Received your paper has been submitted. Have another paper? Send the next PDF anytime.",
             )
         except Exception:
             logger.exception("Could not send PDF to the channel")
-            reply(chat_id, "Sorry, the submission could not be sent. Please try again shortly.")
+            reply(chat_id, "Sorry, the submission could not be sent. Please try again shortly and report to admin if the problem persists.")
         return jsonify(ok=True)
 
     if not document or not is_pdf(document):
@@ -168,8 +167,8 @@ def webhook():
             reply(
                 chat_id,
                 "Send an exam paper as a PDF. Then reply directly to the PDF with its label, "
-                "for example: KMS Chem. PDFs without a reply are sent after 1 minute.",
+                "for example: KMS Phy.",
             )
         else:
-            reply(chat_id, "Please send a PDF first, then reply directly to it with a label like: KMS Chem")
+            reply(chat_id, "Please send a PDF first, then reply directly to it with a label like: KMS Bio.")
         return jsonify(ok=True)
