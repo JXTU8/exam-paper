@@ -155,7 +155,7 @@ def webhook():
             submit_paper(replied_document, label)
             reply(
                 chat_id,
-                "Received your paper has been submitted. Have another paper? Send the next PDF anytime.",
+                "Received — your paper has been submitted. Have another exam paper? Send the next PDF anytime.",
             )
         except Exception:
             logger.exception("Could not send PDF to the channel")
