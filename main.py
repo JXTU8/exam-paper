@@ -17,6 +17,8 @@ TELEGRAM_API = f"https://api.telegram.org/bot{BOT_TOKEN}"
 app = Flask(__name__)
 pending_papers = {}
 pending_lock = threading.Lock()
+announced_sender_ids = set()
+sender_lock = threading.Lock()
 
 
 def configured():
@@ -64,13 +66,30 @@ def submit_paper(document, label):
     telegram("sendDocument", payload)
 
 
+def announce_sender_once(sender):
+    sender_id = sender.get("id")
+    username = str(sender.get("username", "")).lstrip("@")
+    if not sender_id or not username:
+        return
+    with sender_lock:
+        if sender_id in announced_sender_ids:
+            return
+        telegram("sendMessage", {"chat_id": CHANNEL_ID, "text": f"Submitted by: @{username}"})
+        announced_sender_ids.add(sender_id)
+
+
+def publish_paper(document, label, sender):
+    announce_sender_once(sender)
+    submit_paper(document, label)
+
+
 def submit_without_label(paper_key):
     with pending_lock:
         paper = pending_papers.pop(paper_key, None)
     if not paper:
         return
     try:
-        submit_paper(paper["document"], "")
+        publish_paper(paper["document"], "", paper["sender"])
         logger.info("Sent unlabelled paper after one-minute timeout")
     except Exception:
         logger.exception("Could not send unlabelled PDF to the channel")
@@ -106,7 +125,7 @@ def webhook():
         caption_label = message.get("caption", "").strip()
         if is_valid_label(caption_label):
             try:
-                submit_paper(document, caption_label)
+                publish_paper(document, caption_label, message.get("from", {}))
                 reply(
                     chat_id,
                     "Received — your PDF has been submitted. Have another exam paper? Send the next PDF anytime.",
@@ -120,7 +139,11 @@ def webhook():
         timer = threading.Timer(60, submit_without_label, args=(paper_key,))
         timer.daemon = True
         with pending_lock:
-            pending_papers[paper_key] = {"document": document, "timer": timer}
+            pending_papers[paper_key] = {
+                "document": document,
+                "sender": message.get("from", {}),
+                "timer": timer,
+            }
         timer.start()
         reply(
             chat_id,
@@ -152,7 +175,7 @@ def webhook():
             return jsonify(ok=True)
         paper["timer"].cancel()
         try:
-            submit_paper(replied_document, label)
+            publish_paper(replied_document, label, paper["sender"])
             reply(
                 chat_id,
                 "Received — your paper has been submitted. Have another exam paper? Send the next PDF anytime.",
